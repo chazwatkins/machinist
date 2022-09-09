@@ -5,26 +5,8 @@ public class Machinist {
     }
 
     public static Map<Id, Machine> getMachines(String machineName, SObject[] records) {
-        machinist_MachineState__c[] states = [
-            SELECT
-                Id,
-                Machine__r.Name,
-                Machine__r.SObjectType__c,
-                Machine__r.SObjectField__c,
-                State__r.Name,
-                IsInitialState__c,
-                (
-                    SELECT
-                        Action__c,
-                        Event__c,
-                        FromState__r.State__r.Name,
-                        ToState__r.State__r.Name,
-                        Guard__c
-                    FROM FromTransitions__r
-                )
-            FROM machinist_MachineState__c
-            WHERE Machine__r.Name = :machineName
-        ];
+        machinist_MachineState__c[] states =
+            new MachineState_Selector().selectByMachineName(machineName);
 
         Map<Id, Machine> machinesById = new Map<Id, Machine>();
         for(SObject record : records) {
@@ -149,5 +131,30 @@ public class Machinist {
 
     public interface IGuard {
         void call(SObject record);
+    }
+
+    private inherited sharing class MachineState_Selector {
+        public machinist_MachineState__c[] selectByMachineName(String machineName) {
+            return [
+                SELECT
+                    Id,
+                    Machine__r.Name,
+                    Machine__r.SObjectType__c,
+                    Machine__r.SObjectField__c,
+                    State__r.Name,
+                    IsInitialState__c,
+                    (
+                        SELECT
+                            Action__c,
+                            Event__c,
+                            FromState__r.State__r.Name,
+                            ToState__r.State__r.Name,
+                            Guard__c
+                        FROM FromTransitions__r
+                    )
+                FROM machinist_MachineState__c
+                WHERE Machine__r.Name = :machineName
+            ];
+        }
     }
 }
