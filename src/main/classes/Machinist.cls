@@ -1,69 +1,59 @@
 public class Machinist {
 
-    public static Machine getMachine(String machineName, SObject record) {
-        return getMachines(machineName, new List<SObject>{record}).get(record.Id);
-    }
-
-    public static Map<Id, Machine> getMachines(String machineName, SObject[] records) {
+    public static Machine getMachine(String machineName) {
         machinist_MachineState__c[] states =
             new MachineState_Selector().selectByMachineName(machineName);
 
-        Map<Id, Machine> machinesById = new Map<Id, Machine>();
-        for(SObject record : records) {
-            machinesById.put(record.Id, new Machine(states, record));
-        }
-
-        return machinesById;
-
+        return new Machine(states);
     }
 
-    public static void transition(Machine[] machines, String action) {
-        for(Machine machine : machines) {
-            transition(machine, action);
+    public static void transition(Machine machine, String action, SObject[] records) {
+        for(SObject record : records) {
+            transition(machine, action, record);
         }
     }
 
     public static void transition(
         Machine machine,
-        String action
+        String action,
+        SObject record
     ) {
+
+        String incomingSObjectType = String.valueOf(record.getSObjectType());
+        if(incomingSObjectType != machine.sObjectType) {
+            System.debug('Wrong object');
+        }
+
+        String currentStateName = (String)record.get(machine.sObjectField);
+        State currentState = machine.statesByName.get(currentStateName);
+
         Transition transition =
-            machine
-            .currentState
+            currentState
             .toTransitionsByAction
             .get(action);
-
-
 
         if(transition == null) {
             return;
         }
 
-        transition.guard?.call(machine.record);
+        transition.guard?.call(record);
 
-        if(machine.record.hasErrors()) {
-            System.debug(machine.record.getErrors());
+        if(record.hasErrors()) {
+            System.debug(record.getErrors());
             return;
         }
 
-        setCurrentState(machine, transition.toState);
-    }
-
-    private static void setCurrentState(Machine machine, String newStateName) {
-        machine.currentState = machine.statesByName.get(newStateName);
-        machine.record.put(machine.sObjectField, newStateName);
+        record.put(machine.sObjectField, transition.toState);
     }
 
     public class Machine {
         public String name;
         public String sObjectType;
         public String sObjectField;
-        public SObject record;
-        public State currentState;
         public Map<String, State> statesByName =
             new Map<String, State>();
 
-        private Machine(machinist_MachineState__c[] stateRecords, SObject record) {
+        private Machine(machinist_MachineState__c[] stateRecords) {
             machinist_Definition__c definition =
                 (machinist_Definition__c)stateRecords
                     .get(0)
@@ -78,14 +68,6 @@ public class Machinist {
                 this.statesByName.put(state.name, state);
             }
 
-            String incomingSObjectType = String.valueOf(record.getSObjectType());
-            if(incomingSObjectType != this.sObjectType) {
-                System.debug('Wrong object');
-            }
-
-            this.record = record;
-            String currentStateName = (String)record.get(this.sObjectField);
-            this.currentState = this.statesByName.get(currentStateName);
         }
     }
 
