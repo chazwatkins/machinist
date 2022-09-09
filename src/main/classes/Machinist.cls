@@ -18,16 +18,9 @@ public class Machinist {
                         Action__c,
                         Event__c,
                         FromState__r.State__r.Name,
-                        ToState__r.State__r.Name
+                        ToState__r.State__r.Name,
+                        Guard__c
                     FROM FromTransitions__r
-                ),
-                (
-                    SELECT
-                        Action__c,
-                        Event__c,
-                        FromState__r.State__r.Name,
-                        ToState__r.State__r.Name
-                    FROM ToTransitions__r
                 )
             FROM machinist_MachineState__c
             WHERE Machine__r.Name = :machineName
@@ -42,35 +35,48 @@ public class Machinist {
 
     }
 
-    public static void setCurrentState(Machine machine, String newStateName) {
-        machine.currentState = machine.statesByName.get(newStateName);
-        machine.record.put(machine.sObjectField, newStateName);
+    public static void transition(Machine[] machines, String action) {
+        for(Machine machine : machines) {
+            transition(machine, action);
+        }
     }
 
     public static void transition(
         Machine machine,
         String action
     ) {
-        String nextStateName =
+        Transition transition =
             machine
             .currentState
             .toTransitionsByAction
-            .get(action)
-            ?.toState;
+            .get(action);
 
-        if(nextStateName != null) {
-            machine.previousState = machine.currentState;
-            setCurrentState(machine, nextStateName);
+
+
+        if(transition == null) {
+            return;
         }
+
+        transition.guard?.call(machine.record);
+
+        if(machine.record.hasErrors()) {
+            System.debug(machine.record.getErrors());
+            return;
+        }
+
+        setCurrentState(machine, transition.toState);
     }
 
+    private static void setCurrentState(Machine machine, String newStateName) {
+        machine.currentState = machine.statesByName.get(newStateName);
+        machine.record.put(machine.sObjectField, newStateName);
+    }
 
     public class Machine {
         public String name;
         public String sObjectType;
         public String sObjectField;
         public SObject record;
-        public State previousState;
         public State currentState;
         public Map<String, State> statesByName =
             new Map<String, State>();
@@ -87,10 +93,6 @@ public class Machinist {
 
             for(machinist_MachineState__c stateRecord : stateRecords) {
                 State state = new State(stateRecord);
-                if(state.isInitial && this.currentState == null) {
-                    this.currentState = state;
-                }
-
                 this.statesByName.put(state.name, state);
             }
 
@@ -100,6 +102,8 @@ public class Machinist {
             }
 
             this.record = record;
+            String currentStateName = (String)record.get(this.sObjectField);
+            this.currentState = this.statesByName.get(currentStateName);
         }
     }
 
@@ -125,13 +129,25 @@ public class Machinist {
         public String toState;
         public String action;
         public String event;
+        public IGuard guard;
 
         private Transition(machinist_Transition__c transitionRecord) {
             this.fromState = transitionRecord.FromState__r.State__r.Name;
             this.toState = transitionRecord.ToState__r.State__r.Name;
             this.action = transitionRecord.Action__c;
             this.event = transitionRecord.Event__c;
+
+            if(!String.isEmpty(transitionRecord.Guard__c)) {
+                Type guardType = Type.forName(transitionRecord.Guard__c);
+                if(guardType != null) {
+                    this.guard = (IGuard) guardType.newInstance();
+                }
+            }
+
         }
     }
 
+    public interface IGuard {
+        void call(SObject record);
+    }
 }
