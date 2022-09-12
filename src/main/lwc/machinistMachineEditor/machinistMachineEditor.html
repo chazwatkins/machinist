@@ -1,7 +1,38 @@
-<!--
- - Created by chazw on 9/11/2022.
- -->
-
-<!-- Machinist Machine Editor -->
 <template>
+    <lightning-combobox
+            name="targetSObjectType"
+            label="Target SObjectType"
+            placeholder="Select SObjectType"
+            options={sObjectTypeOptions}
+            onchange={getSObjectTypeDetails}
+            required
+    ></lightning-combobox>
+    <lightning-combobox
+            name="targetSObjectField"
+            label="Target SObjectField"
+            value=""
+            placeholder="Select SObjectField"
+            options={sObjectFieldOptions}
+            required
+    ></lightning-combobox>
+<!--    <lightning-button-stateful-->
+<!--            label-when-off="Apply to Record Type"-->
+<!--            label-when-on="Record Type Specific"-->
+<!--            label-when-hover="Apply to all"-->
+<!--            icon-name-when-off="utility:add"-->
+<!--            icon-name-when-on="utility:check"-->
+<!--            icon-name-when-hover="utility:close"-->
+<!--            selected={isRecordTypeSpecific}-->
+<!--            onclick={toggleIsRecordTypeSpecific}>-->
+<!--    </lightning-button-stateful>-->
+<!--    <template if:true="isRecordTypeSpecific">-->
+<!--        <lightning-combobox-->
+<!--                name="targetRecordType"-->
+<!--                label="Target RecordType"-->
+<!--                value=""-->
+<!--                placeholder="Select RecordType"-->
+<!--                options={recordTypeOptions}-->
+<!--                onchange={handleChange}-->
+<!--        ></lightning-combobox>-->
+<!--    </template>-->
 </template>

@@ -1,29 +1,27 @@
 public class Machinist {
 
+    public static Machine newMachine() {
+        return new Machine();
+    }
+
+    public static void createMachine(Machinist.Machine machine) {
+        System.debug('Machine created');
+    }
+
     public static Machine getMachine(String machineName) {
-        machinist_Machine__c machineRecord =
-            new Machine_Selector()
-                .selectByMachineName(machineName)
-                ?.get(0);
+        machinist_Machine__c machineRecord;
+
+        try {
+            machineRecord =
+                new Machine_Selector()
+                    .selectByMachineName(machineName)
+                    .get(0);
+        }
+        catch(System.ListException e) {
+            throw new MachineNotFoundException('Machine `' + machineName + '` not found');
+        }
 
         return new Machine(machineRecord);
-    }
-    public static void deleteMachine(Machine machine) {
-        delete machineToSObject(machine);
-    }
-
-    public static void createTransition(Transition transition) {
-        insert transitionToSObject(transition);
-    }
-
-
-    public static void updateTransition(Transition transition) {
-        update transitionToSObject(transition);
-    }
-
-
-    public static void deleteTransition(Transition transition) {
-        delete transitionToSObject(transition);
     }
 
     public static void transition(Machine machine, String action, SObject[] records) {
@@ -101,7 +99,10 @@ public class Machinist {
         @AuraEnabled
         public String targetSObjectField;
         @AuraEnabled
-        public Map<String, State> statesByName;
+        public Map<String, State> statesByName =
+            new Map<String, State>();
+
+        private Machine() {}
 
         private Machine(machinist_Machine__c machineRecord) {
             this.id = machineRecord.Id;
@@ -109,18 +110,12 @@ public class Machinist {
             this.targetSObjectType = machineRecord.TargetSObjectType__c;
             this.targetSObjectField = machineRecord.TargetSObjectField__c;
             this.targetRecordType = machineRecord.TargetRecordType__c;
-
-            this.statesByName = getStates(this.targetSObjectType, this.targetSObjectField);
-
-            for(machinist_Transition__c transitionRecord : machineRecord.Transitions__r) {
-                String fromState = transitionRecord.FromState__c;
-
-                this.statesByName
-                    .get(fromState)
-                    .toTransitionsByAction
-                    .put(transitionRecord.Action__c, new Transition(transitionRecord, this.id));
-            }
-
+            this.statesByName = buildStates(
+                this.targetSObjectType,
+                this.targetSObjectField,
+                machineRecord.Transitions__r,
+                this.id
+            );
         }
     }
 
@@ -176,7 +171,12 @@ public class Machinist {
         void call(SObject record);
     }
 
-    private static Map<String, State> getStates(String sObjType, String sObjField) {
+    private static Map<String, State> buildStates(
+        String sObjType,
+        String sObjField,
+        machinist_Transition__c[] transitionRecords,
+        Id machineId
+    ) {
         PicklistEntry[] picklistEntries =
             Schema.getGlobalDescribe()
             .get(sObjType.toLowerCase())
@@ -187,14 +187,23 @@ public class Machinist {
             .getDescribe()
             .getPicklistValues();
 
-        Map<String, State> states = new Map<String, State>();
+        Map<String, State> statesByName = new Map<String, State>();
         for(PicklistEntry entry : picklistEntries) {
             if(entry.active) {
-                states.put(entry.label, new State(entry.label));
+                statesByName.put(entry.label, new State(entry.label));
             }
         }
 
-        return states;
+        for(machinist_Transition__c transitionRecord : transitionRecords) {
+            String fromState = transitionRecord.FromState__c;
+
+            statesByName
+                .get(fromState)
+                .toTransitionsByAction
+                .put(transitionRecord.Action__c, new Transition(transitionRecord, machineId));
+        }
+
+        return statesByName;
     }
 
     private inherited sharing class Machine_Selector {
@@ -217,7 +226,12 @@ public class Machinist {
                     )
                 FROM machinist_Machine__c
                 WHERE Name = :machineName
+                LIMIT 1
             ];
         }
     }
+
+    public class MachineNotFoundException extends Exception {}
+    public class ActionNotFoundException extends Exception {}
+    public class TransitionFailedException extends Exception {}
 }
