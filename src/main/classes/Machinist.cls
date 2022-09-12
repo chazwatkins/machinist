@@ -8,22 +8,22 @@ public class Machinist {
 
         return new Machine(machineRecord);
     }
-    public static void deleteMachines(Machine[] machines) {
-
+    public static void deleteMachine(Machine machine) {
+        delete machineToSObject(machine);
     }
 
-    public static void createTransition(Id machineId, Transition transition) {
-
+    public static void createTransition(Transition transition) {
+        insert transitionToSObject(transition);
     }
 
 
-    public static void updateTransition(Id machineId, Transition transition) {
-        // Machinist.updateTransitions()
+    public static void updateTransition(Transition transition) {
+        update transitionToSObject(transition);
     }
 
 
     public static void deleteTransition(Transition transition) {
-
+        delete transitionToSObject(transition);
     }
 
     public static void transition(Machine machine, String action, SObject[] records) {
@@ -48,7 +48,7 @@ public class Machinist {
 
         Transition transition =
             currentState
-            ?.toTransitionsByAction
+            .toTransitionsByAction
             .get(action);
 
         if(transition == null) {
@@ -65,6 +65,30 @@ public class Machinist {
         record.put(machine.targetSObjectField, transition.toState);
     }
 
+    private static machinist_Machine__c machineToSObject(Machine machine) {
+        return new machinist_Machine__c(
+            Id=machine.id,
+            Name=machine.name,
+            TargetSObjectType__c=machine.targetSObjectType,
+            TargetRecordType__c=machine.targetRecordType,
+            TargetSObjectField__c=machine.targetSObjectField
+        );
+    }
+
+    private static machinist_Transition__c transitionToSObject(
+        Transition transition
+    ) {
+        return new machinist_Transition__c(
+            Id=transition.id,
+            FromState__c=transition.fromState,
+            ToState__c=transition.toState,
+            Action__c=transition.action,
+            Event__c=transition.event,
+            Guard__c=transition.guardName,
+            Machine__c=transition.machineId
+        );
+    }
+
     public class Machine {
         @AuraEnabled
         public Id id;
@@ -77,8 +101,7 @@ public class Machinist {
         @AuraEnabled
         public String targetSObjectField;
         @AuraEnabled
-        public Map<String, State> statesByName =
-            new Map<String, State>();
+        public Map<String, State> statesByName;
 
         private Machine(machinist_Machine__c machineRecord) {
             this.id = machineRecord.Id;
@@ -87,17 +110,15 @@ public class Machinist {
             this.targetSObjectField = machineRecord.TargetSObjectField__c;
             this.targetRecordType = machineRecord.TargetRecordType__c;
 
+            this.statesByName = getStates(this.targetSObjectType, this.targetSObjectField);
+
             for(machinist_Transition__c transitionRecord : machineRecord.Transitions__r) {
                 String fromState = transitionRecord.FromState__c;
-                if(!statesByName.keySet().contains(fromState)) {
-                    State newState = new State(fromState);
-                    this.statesByName.put(newState.name, newState);
-                }
 
                 this.statesByName
                     .get(fromState)
                     .toTransitionsByAction
-                    .put(transitionRecord.Action__c, new Transition(transitionRecord));
+                    .put(transitionRecord.Action__c, new Transition(transitionRecord, this.id));
             }
 
         }
@@ -128,15 +149,18 @@ public class Machinist {
         public String event;
         @AuraEnabled
         public String guardName;
+        @AuraEnabled
+        public Id machineId;
         public IGuard guard;
 
-        private Transition(machinist_Transition__c transitionRecord) {
+        private Transition(machinist_Transition__c transitionRecord, Id machineId) {
             this.id = transitionRecord.Id;
             this.fromState = transitionRecord.FromState__c;
             this.toState = transitionRecord.ToState__c;
             this.action = transitionRecord.Action__c;
             this.event = transitionRecord.Event__c;
             this.guardName = transitionRecord.Guard__c;
+            this.machineId = machineId;
 
             if(!String.isEmpty(transitionRecord.Guard__c)) {
                 Type guardType = Type.forName(this.guardName);
@@ -150,6 +174,27 @@ public class Machinist {
 
     public interface IGuard {
         void call(SObject record);
+    }
+
+    private static Map<String, State> getStates(String sObjType, String sObjField) {
+        PicklistEntry[] picklistEntries =
+            Schema.getGlobalDescribe()
+            .get(sObjType.toLowerCase())
+            .getDescribe()
+            .fields
+            .getMap()
+            .get(sObjField.toLowerCase())
+            .getDescribe()
+            .getPicklistValues();
+
+        Map<String, State> states = new Map<String, State>();
+        for(PicklistEntry entry : picklistEntries) {
+            if(entry.active) {
+                states.put(entry.label, new State(entry.label));
+            }
+        }
+
+        return states;
     }
 
     private inherited sharing class Machine_Selector {
