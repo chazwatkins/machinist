@@ -1,99 +1,83 @@
 public with sharing class Machinist_Controller {
-
-  private static Map<String, SObjectType> sObjectTypesByName =
-      Schema.getGlobalDescribe();
-
-  private static Map<String, DescribeSObjectResult> sObjectDescribeByName =
-      new Map<String, DescribeSObjectResult>();
-
-  @AuraEnabled
-  public static MachineEditor newMachine() {
-    return new MachineEditor(
-        Machinist.newMachine(),
-        getSObjectTypeOptions()
-    );
-  }
-
   @AuraEnabled
   public static void createMachine(Machinist.Machine machine) {
     Machinist.createMachine(machine);
   }
 
   @AuraEnabled(Cacheable=true)
-  public static Machinist.Machine getMachine(String machineName) {
-    return Machinist.getMachine(machineName);
-  }
-
-  @AuraEnabled(Cacheable=false)
-  public static SObjectTypeDetails getSObjectTypeDetails(String sObjTypeName) {
-    return new SObjectTypeDetails(
-        getSObjectFields(sObjTypeName),
-        getActiveSObjectRecordTypes(sObjTypeName)
-    );
-  }
-
-  private static SelectOption[] getSObjectTypeOptions() {
-    SelectOption[] sObjects = new List<SelectOption>();
-    for(SObjectType sObjType : sObjectTypesByName.values()) {
-      String sObjTypeName = String.valueOf(sObjType);
-      DescribeSObjectResult sObjDetails = getSObjectDescribe(sObjTypeName);
-      sObjects.add(new SelectOption(sObjDetails.label, sObjDetails.name));
+  public static Machinist.Machine getMachine(String machineId) {
+    try {
+      return Machinist.getMachine((Id)machineId);
+    } catch(Exception e) {
+      return Machinist.newMachine();
     }
-
-    return sObjects;
   }
 
-  private static SelectOption[] getSObjectFields(String sObjectApiName) {
-    SelectOption[] sObjectFields = new List<SelectOption>();
+  @AuraEnabled(Cacheable=true)
+  public static SelectOption[] getSObjectTypes() {
+    SelectOption[] sObjectOptions = new List<SelectOption>();
 
-    DescribeSObjectResult sObjDetails = getSObjectDescribe(sObjectApiName);
-    for(SObjectField field : sObjDetails.fields.getMap().values()) {
-      DescribeFieldResult fieldDetails = field.getDescribe();
-
-      String fieldLabel =
-          String.format(
-              '{0} ({1})',
-              new List<String>{
-                  fieldDetails.label,
-                  fieldDetails.type.name().toLowerCase()
-              }
-          );
-
-      sObjectFields.add(
+    EntityDefinition[] entityDefinitions =
+        machinist_EntityDefinition_Selector.getAllSObjectTypes();
+    for(EntityDefinition entityDefinition : entityDefinitions) {
+      sObjectOptions.add(
           new SelectOption(
-              fieldLabel,
-              fieldDetails.name
+              entityDefinition.MasterLabel,
+              entityDefinition.QualifiedApiName
           )
       );
     }
 
-    return sObjectFields;
+    return sObjectOptions;
   }
 
-  private static SelectOption[] getActiveSObjectRecordTypes(String sObjectApiName) {
+  @AuraEnabled(Cacheable=true)
+  public static SObjectTypeDetails getSObjectDetails(String sObjTypeName) {
+    return new SObjectTypeDetails(
+        getSObjectPicklistFields(sObjTypeName),
+        getSObjectRecordTypes(sObjTypeName)
+    );
+  }
+
+
+  private static SelectOption[] getSObjectPicklistFields(String sObjTypeName) {
+    SelectOption[] fieldOptions = new List<SelectOption>();
+
+    FieldDefinition[] fieldDefinitions =
+        machinist_EntityDefinition_Selector.getSObjectTypePicklistFields(sObjTypeName);
+    for(FieldDefinition fieldDefinition : fieldDefinitions) {
+      fieldOptions.add(
+          new SelectOption(
+              fieldDefinition.MasterLabel,
+              fieldDefinition.QualifiedApiName
+          )
+      );
+    }
+
+    return fieldOptions;
+  }
+
+  private static SelectOption[] getSObjectRecordTypes(String sObjTypeName) {
+    RecordType[] recordTypeRecords = [
+        SELECT
+            Name,
+            DeveloperName
+        FROM RecordType
+        WHERE SobjectType = :sObjTypeName
+        AND IsActive = TRUE
+    ];
+
     SelectOption[] recordTypes = new List<SelectOption>();
 
-    SObjectType sObjType = Schema.getGlobalDescribe().get(sObjectApiName.toLowerCase());
-    for(RecordTypeInfo recordType : sObjType.getDescribe().recordTypeInfos) {
-      if(!recordType.active || recordType.isMaster()) {
-        continue;
-      }
-
-      recordTypes.add(new SelectOption(recordType.name, recordType.developerName));
+    for(RecordType record : recordTypeRecords) {
+      recordTypes.add(
+          new SelectOption(record.Name, record.DeveloperName)
+      );
     }
 
     return recordTypes;
   }
 
-  private static DescribeSObjectResult getSObjectDescribe(String sObjTypeName) {
-    String sObjTypeKey = sObjTypeName.toLowerCase();
-    if(!sObjectDescribeByName.keySet().contains(sObjTypeKey)) {
-      SObjectType sObjType = sObjectTypesByName.get(sObjTypeKey);
-      sObjectDescribeByName.put(sObjTypeName, sObjType.getDescribe());
-    }
-
-    return sObjectDescribeByName.get(sObjTypeName);
-  }
 
   public class SelectOption {
     @AuraEnabled
@@ -107,33 +91,18 @@ public with sharing class Machinist_Controller {
     }
   }
 
-  public class MachineEditor {
-    @AuraEnabled
-    public Machinist.Machine machine;
-    @AuraEnabled
-    public SelectOption[] sObjectTypeOptions;
-
-    private MachineEditor(
-        Machinist.Machine machine,
-        SelectOption[] sObjectTypeOptions
-    ) {
-      this.machine = machine;
-      this.sObjectTypeOptions = sObjectTypeOptions;
-    }
-  }
-
   public class SObjectTypeDetails {
     @AuraEnabled
-    public SelectOption[] sObjectFieldOptions;
+    public SelectOption[] sObjectFields;
     @AuraEnabled
-    public SelectOption[] recordTypeOptions;
+    public SelectOption[] recordTypes;
 
     private SObjectTypeDetails(
-        SelectOption[] sObjectFieldOptions,
-        SelectOption[] recordTypeOptions
+        SelectOption[] sObjectFields,
+        SelectOption[] recordTypes
     ) {
-      this.sObjectFieldOptions = sObjectFieldOptions;
-      this.recordTypeOptions = recordTypeOptions;
+      this.sObjectFields = sObjectFields;
+      this.recordTypes = recordTypes;
     }
   }
 }

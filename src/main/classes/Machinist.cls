@@ -8,16 +8,30 @@ public class Machinist {
         System.debug('Machine created');
     }
 
+    public static Machine getMachine(Id machineId) {
+        machinist_Machine__c machineRecord;
+
+        try {
+            machineRecord =
+                new Machine_Selector()
+                    .selectById(machineId);
+        }
+        catch(QueryException e) {
+            throw new MachineNotFoundException('MachineId `' + machineId + '` not found');
+        }
+
+        return new Machine(machineRecord);
+    }
+
     public static Machine getMachine(String machineName) {
         machinist_Machine__c machineRecord;
 
         try {
             machineRecord =
                 new Machine_Selector()
-                    .selectByMachineName(machineName)
-                    .get(0);
+                    .selectByMachineName(machineName);
         }
-        catch(System.ListException e) {
+        catch(QueryException e) {
             throw new MachineNotFoundException('Machine `' + machineName + '` not found');
         }
 
@@ -63,7 +77,9 @@ public class Machinist {
         record.put(machine.targetSObjectField, transition.toState);
     }
 
-    private static machinist_Machine__c machineToSObject(Machine machine) {
+    private static machinist_Machine__c machineToSObject(
+        Machine machine
+    ) {
         return new machinist_Machine__c(
             Id=machine.id,
             Name=machine.name,
@@ -89,15 +105,15 @@ public class Machinist {
 
     public class Machine {
         @AuraEnabled
-        public Id id;
+        public Id id = null;
         @AuraEnabled
-        public String name;
+        public String name = null;
         @AuraEnabled
-        public String targetSObjectType;
+        public String targetSObjectType = null;
         @AuraEnabled
-        public String targetRecordType;
+        public String targetRecordType = null;
         @AuraEnabled
-        public String targetSObjectField;
+        public String targetSObjectField = null;
         @AuraEnabled
         public Map<String, State> statesByName =
             new Map<String, State>();
@@ -148,7 +164,10 @@ public class Machinist {
         public Id machineId;
         public IGuard guard;
 
-        private Transition(machinist_Transition__c transitionRecord, Id machineId) {
+        private Transition(
+            machinist_Transition__c transitionRecord,
+            Id machineId
+        ) {
             this.id = transitionRecord.Id;
             this.fromState = transitionRecord.FromState__c;
             this.toState = transitionRecord.ToState__c;
@@ -207,7 +226,30 @@ public class Machinist {
     }
 
     private inherited sharing class Machine_Selector {
-        public machinist_Machine__c[] selectByMachineName(String machineName) {
+
+        public machinist_Machine__c selectById(Id machineId) {
+            return [
+                SELECT
+                    Id,
+                    Name,
+                    TargetSObjectType__c,
+                    TargetSObjectField__c,
+                    TargetRecordType__c,
+                    (
+                        SELECT
+                            Action__c,
+                            Event__c,
+                            FromState__c,
+                            ToState__c,
+                            Guard__c
+                        FROM Transitions__r
+                    )
+                FROM machinist_Machine__c
+                WHERE Id = :machineId
+                LIMIT 1
+            ];
+        }
+        public machinist_Machine__c selectByMachineName(String machineName) {
             return [
                 SELECT
                     Id,
