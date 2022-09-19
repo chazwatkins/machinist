@@ -5,6 +5,6 @@
     <isExposed>true</isExposed>
     <masterLabel>Machinist Machine Editor</masterLabel>
     <targets>
-        <target>lightning__RecordPage</target>
+        <target>lightning__AppPage</target>
     </targets>
 </LightningComponentBundle>

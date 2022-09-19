@@ -1,39 +1,81 @@
 <template>
-    <h1>RecordId: {recordId}</h1>
-    <h1>MachineId: {machine.id}</h1>
-    <template if:true={sObjectTypes}>
-        <lightning-combobox
-                label="Target SObjectType"
-                options={sObjectTypes}
-                value={targetSObjectType}
-                placeholder="Select an SObjectType"
-                onchange={setTargetSObjectType}
-        ></lightning-combobox>
-        <lightning-combobox
-                label="Target SObjectField"
-                options={sObjectFields}
-                value={targetSObjectField}
-                placeholder="Select SObjectField"
-                onchange={setTargetSObjectField}
-                disabled={isSObjectTypeSelected}
-        ></lightning-combobox>
-        <template if:true={hasRecordTypes}>
-            <lightning-input
-                    type="toggle"
-                    label="RecordType specific"
-                    onchange={setIsRecordTypeSpecific}
-            ></lightning-input>
-        </template>
-        <template if:true={isRecordTypeSpecific}>
+    <div class="slds-m-top_medium slds-m-bottom_x-large">
+        <lightning-input
+                type="text"
+                label="Machine Id"
+                value={machine.id}
+                onblur={setRecordId}
+        ></lightning-input>
+        <lightning-input
+                type="text"
+                label="Machine Name"
+                value={machineName}
+                onblur={setMachineName}
+        ></lightning-input>
+        <template if:true={sObjectTypes}>
             <lightning-combobox
-                    label="Target RecordType"
-                    options={recordTypes}
-                    value={targetRecordType}
-                    placeholder="Select RecordType"
-                    onchange={setTargetRecordType}
-                    disabled={isFieldSelectDisabled}
+                    label="Target SObjectType"
+                    options={sObjectTypes}
+                    value={targetSObjectType}
+                    placeholder="Select an SObjectType"
+                    onchange={setTargetSObjectType}
             ></lightning-combobox>
+            <lightning-combobox
+                    label="Target SObjectField"
+                    options={sObjectFields}
+                    value={targetSObjectField}
+                    placeholder="Select SObjectField"
+                    onchange={setTargetSObjectField}
+                    disabled={isSObjectTypeSelected}
+            ></lightning-combobox>
+            <template if:true={hasRecordTypes}>
+                <lightning-input
+                        type="toggle"
+                        label="RecordType specific"
+                        onchange={setIsRecordTypeSpecific}
+                ></lightning-input>
+            </template>
+            <template if:true={isRecordTypeSpecific}>
+                <lightning-combobox
+                        label="Target RecordType"
+                        options={recordTypes}
+                        value={targetRecordType}
+                        placeholder="Select RecordType"
+                        onchange={setTargetRecordType}
+                        disabled={isFieldSelectDisabled}
+                ></lightning-combobox>
+            </template>
         </template>
-    </template>
-
+        <lightning-button
+                variant="brand"
+                label="Create"
+                title="Create Machine"
+                onclick={createMachine}
+                disabled={isMachinePending}
+        ></lightning-button>
+    </div>
+    <div class="slds-m-top_medium slds-m-bottom_x-large">
+        <template if:true={transitions}>
+        <template for:each={transitions} for:item="transition">
+            <template key=transition.Id>
+                <lightning-combobox
+                        label="From State"
+                        options={stateOptions}
+                        value={transition.FromState__c}
+                        placeholder="Select State"
+                ></lightning-combobox>
+                <lightning-input
+                        type="text"
+                        label="Action"
+                        value={transition.Action__c}
+                ></lightning-input>
+                <lightning-combobox
+                        label="To State"
+                        options={stateOptions}
+                        value={transition.ToState__c}
+                        placeholder="Select State"
+                ></lightning-combobox>
+            </template>
+        </template>
+    </div>
 </template>

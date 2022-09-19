@@ -1,11 +1,13 @@
 public with sharing class Machinist_Controller {
   @AuraEnabled
-  public static void createMachine(Machinist.Machine machine) {
-    Machinist.createMachine(machine);
+  public static machinist_Machine__c createMachine(String machineConfig) {
+    machinist_Machine__c newMachine =
+        (machinist_Machine__c) JSON.deserialize(machineConfig, machinist_Machine__c.class);
+    return Machinist.createMachine(newMachine);
   }
 
   @AuraEnabled(Cacheable=true)
-  public static Machinist.Machine getMachine(String machineId) {
+  public static machinist_Machine__c getMachine(String machineId) {
     try {
       return Machinist.getMachine((Id)machineId);
     } catch(Exception e) {
@@ -61,7 +63,7 @@ public with sharing class Machinist_Controller {
     RecordType[] recordTypeRecords = [
         SELECT
             Name,
-            DeveloperName
+            Id
         FROM RecordType
         WHERE SobjectType = :sObjTypeName
         AND IsActive = TRUE
@@ -71,7 +73,7 @@ public with sharing class Machinist_Controller {
 
     for(RecordType record : recordTypeRecords) {
       recordTypes.add(
-          new SelectOption(record.Name, record.DeveloperName)
+          new SelectOption(record.Name, record.Id)
       );
     }
 

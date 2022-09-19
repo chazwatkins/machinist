@@ -1,228 +1,90 @@
 public class Machinist {
 
-    public static Machine newMachine() {
-        return new Machine();
+    public static machinist_Machine__c newMachine() {
+        return new machinist_Machine__c();
     }
 
-    public static void createMachine(Machinist.Machine machine) {
-        System.debug('Machine created');
+    public static machinist_Machine__c createMachine(machinist_Machine__c newMachine) {
+        insert newMachine;
+        return new Machine_Selector()
+            .selectById(newMachine.Id);
     }
 
-    public static Machine getMachine(Id machineId) {
-        machinist_Machine__c machineRecord;
-
-        try {
-            machineRecord =
-                new Machine_Selector()
-                    .selectById(machineId);
-        }
-        catch(QueryException e) {
-            throw new MachineNotFoundException('MachineId `' + machineId + '` not found');
-        }
-
-        return new Machine(machineRecord);
+    public static machinist_Machine__c getMachine(Id machineId) {
+        return new Machine_Selector()
+            .selectById(machineId);
     }
 
-    public static Machine getMachine(String machineName) {
-        machinist_Machine__c machineRecord;
-
-        try {
-            machineRecord =
-                new Machine_Selector()
-                    .selectByMachineName(machineName);
-        }
-        catch(QueryException e) {
-            throw new MachineNotFoundException('Machine `' + machineName + '` not found');
-        }
-
-        return new Machine(machineRecord);
+    public static machinist_Machine__c getMachine(String machineName) {
+        return new Machine_Selector()
+            .selectByName(machineName);
     }
 
-    public static void transition(Machine machine, String action, SObject[] records) {
+    public static void transition(machinist_Machine__c machine, String action, SObject[] records) {
+
+        assertMachineAndRecordSObjectTypesMatch(machine, records);
+
+        machinist_Transition__c toTransition = getTransitionByAction(machine, action);
+
+        IGuard guard = getGuard(toTransition);
+
         for(SObject record : records) {
-            transition(machine, action, record);
-        }
-    }
+            guard?.call(record);
 
-    public static void transition(
-        Machine machine,
-        String action,
-        SObject record
-    ) {
-
-        String incomingSObjectType = String.valueOf(record.getSObjectType());
-        if(incomingSObjectType != machine.targetSObjectType) {
-            System.debug('Wrong object');
-        }
-
-        String currentStateName = (String)record.get(machine.targetSObjectField);
-        State currentState = machine.statesByName.get(currentStateName);
-
-        Transition transition =
-            currentState
-            .toTransitionsByAction
-            .get(action);
-
-        if(transition == null) {
-            return;
-        }
-
-        transition.guard?.call(record);
-
-        if(record.hasErrors()) {
-            System.debug(record.getErrors());
-            return;
-        }
-
-        record.put(machine.targetSObjectField, transition.toState);
-    }
-
-    private static machinist_Machine__c machineToSObject(
-        Machine machine
-    ) {
-        return new machinist_Machine__c(
-            Id=machine.id,
-            Name=machine.name,
-            TargetSObjectType__c=machine.targetSObjectType,
-            TargetRecordType__c=machine.targetRecordType,
-            TargetSObjectField__c=machine.targetSObjectField
-        );
-    }
-
-    private static machinist_Transition__c transitionToSObject(
-        Transition transition
-    ) {
-        return new machinist_Transition__c(
-            Id=transition.id,
-            FromState__c=transition.fromState,
-            ToState__c=transition.toState,
-            Action__c=transition.action,
-            Event__c=transition.event,
-            Guard__c=transition.guardName,
-            Machine__c=transition.machineId
-        );
-    }
-
-    public class Machine {
-        @AuraEnabled
-        public Id id = null;
-        @AuraEnabled
-        public String name = null;
-        @AuraEnabled
-        public String targetSObjectType = null;
-        @AuraEnabled
-        public String targetRecordType = null;
-        @AuraEnabled
-        public String targetSObjectField = null;
-        @AuraEnabled
-        public Map<String, State> statesByName =
-            new Map<String, State>();
-
-        private Machine() {}
-
-        private Machine(machinist_Machine__c machineRecord) {
-            this.id = machineRecord.Id;
-            this.name = machineRecord.Name;
-            this.targetSObjectType = machineRecord.TargetSObjectType__c;
-            this.targetSObjectField = machineRecord.TargetSObjectField__c;
-            this.targetRecordType = machineRecord.TargetRecordType__c;
-            this.statesByName = buildStates(
-                this.targetSObjectType,
-                this.targetSObjectField,
-                machineRecord.Transitions__r,
-                this.id
-            );
-        }
-    }
-
-    public class State {
-        @AuraEnabled
-        public String name;
-        @AuraEnabled
-        public Map<String, Transition> toTransitionsByAction =
-            new Map<String, Transition>();
-
-        private State(String name) {
-            this.name = name;
-        }
-    }
-
-    public class Transition {
-        @AuraEnabled
-        public Id id;
-        @AuraEnabled
-        public String fromState;
-        @AuraEnabled
-        public String toState;
-        @AuraEnabled
-        public String action;
-        @AuraEnabled
-        public String event;
-        @AuraEnabled
-        public String guardName;
-        @AuraEnabled
-        public Id machineId;
-        public IGuard guard;
-
-        private Transition(
-            machinist_Transition__c transitionRecord,
-            Id machineId
-        ) {
-            this.id = transitionRecord.Id;
-            this.fromState = transitionRecord.FromState__c;
-            this.toState = transitionRecord.ToState__c;
-            this.action = transitionRecord.Action__c;
-            this.event = transitionRecord.Event__c;
-            this.guardName = transitionRecord.Guard__c;
-            this.machineId = machineId;
-
-            if(!String.isEmpty(transitionRecord.Guard__c)) {
-                Type guardType = Type.forName(this.guardName);
-                if(guardType != null) {
-                    this.guard = (IGuard) guardType.newInstance();
-                }
+            if(record.hasErrors()) {
+                continue;
             }
 
+            record.put(machine.TargetSObjectField__c, toTransition.ToState__c);
         }
+    }
+
+    private static machinist_Transition__c getTransitionByAction(machinist_Machine__c machine, String action) {
+        machinist_Transition__c toTransition;
+
+        for(machinist_Transition__c transition : machine.Transitions__r) {
+            if(transition.Action__c == action) {
+                toTransition = transition;
+                break;
+            }
+        }
+
+        if(toTransition == null) {
+            throw new ActionNotFoundException(action);
+        }
+
+        return toTransition;
+    }
+
+    private static void assertMachineAndRecordSObjectTypesMatch(
+        machinist_Machine__c machine,
+        SObject[] records
+    ) {
+        String incomingSObjectType = String.valueOf(records.getSObjectType());
+        if(incomingSObjectType != machine.TargetSObjectType__c) {
+            throw new SObjectTypeMismatchException(
+                'Expected ' + machine.TargetSObjectType__c + '' +
+                    ', but received ' + incomingSObjectType);
+        }
+    }
+
+    private static IGuard getGuard(machinist_Transition__c transition) {
+        IGuard guard;
+
+        if(String.isEmpty(transition.Guard__c)) {
+            guard = null;
+        }
+
+        Type guardType = Type.forName(transition.Guard__c);
+        if(guardType != null) {
+            guard = (IGuard) guardType.newInstance();
+        }
+
+        return guard;
     }
 
     public interface IGuard {
         void call(SObject record);
-    }
-
-    private static Map<String, State> buildStates(
-        String sObjType,
-        String sObjField,
-        machinist_Transition__c[] transitionRecords,
-        Id machineId
-    ) {
-        PicklistEntry[] picklistEntries =
-            Schema.getGlobalDescribe()
-            .get(sObjType.toLowerCase())
-            .getDescribe()
-            .fields
-            .getMap()
-            .get(sObjField.toLowerCase())
-            .getDescribe()
-            .getPicklistValues();
-
-        Map<String, State> statesByName = new Map<String, State>();
-        for(PicklistEntry entry : picklistEntries) {
-            if(entry.active) {
-                statesByName.put(entry.label, new State(entry.label));
-            }
-        }
-
-        for(machinist_Transition__c transitionRecord : transitionRecords) {
-            String fromState = transitionRecord.FromState__c;
-
-            statesByName
-                .get(fromState)
-                .toTransitionsByAction
-                .put(transitionRecord.Action__c, new Transition(transitionRecord, machineId));
-        }
-
-        return statesByName;
     }
 
     private inherited sharing class Machine_Selector {
@@ -249,7 +111,7 @@ public class Machinist {
                 LIMIT 1
             ];
         }
-        public machinist_Machine__c selectByMachineName(String machineName) {
+        public machinist_Machine__c selectByName(String machineName) {
             return [
                 SELECT
                     Id,
@@ -274,6 +136,7 @@ public class Machinist {
     }
 
     public class MachineNotFoundException extends Exception {}
+    public class SObjectTypeMismatchException extends Exception {}
     public class ActionNotFoundException extends Exception {}
     public class TransitionFailedException extends Exception {}
 }
